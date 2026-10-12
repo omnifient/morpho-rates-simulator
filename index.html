@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Borrow Rates Simulator</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+    integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC"
+    crossorigin="anonymous"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      padding: 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    header h1 { font-size: 1.5rem; font-weight: 600; }
+
+    #last-updated { color: #8b949e; font-size: 0.8rem; }
+
+    section.panel {
+      background: #161b22; border: 1px solid #21262d;
+      border-radius: 8px; padding: 20px; margin-bottom: 24px;
+    }
+    section.panel h2 { font-size: 1.1rem; margin-bottom: 16px; }
+
+    .loader-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+    input[type=text], select {
+      background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
+      border-radius: 6px; padding: 8px 10px; font-size: 0.9rem; font-family: inherit;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input[type=text]:hover, select:hover { border-color: #484f58; }
+    input[type=text]:focus, select:focus { outline: none; border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,0.2); }
+    input.edited { color: #ffa657; border-color: #d29922; }
+    input.invalid { border-color: #f85149; }
+
+    #target-input { flex: 1; min-width: 320px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+
+    button.primary {
+      background: #238636; color: #fff; border: none;
+      padding: 8px 20px; border-radius: 6px;
+      font-size: 0.875rem; cursor: pointer; font-weight: 500;
+    }
+    button.primary:hover { background: #2ea043; }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    button.ghost {
+      background: transparent; color: #8b949e; border: 1px solid #30363d;
+      padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer;
+    }
+    button.ghost:hover { color: #e6edf3; border-color: #484f58; }
+
+    .entity { margin-top: 14px; font-size: 0.9rem; color: #8b949e; min-height: 1.2em; }
+    .entity a { color: #58a6ff; text-decoration: none; }
+    .entity a:hover { text-decoration: underline; }
+    .badge {
+      display: inline-block; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em;
+      text-transform: uppercase; padding: 2px 8px; border-radius: 10px;
+      background: #1f6feb33; color: #58a6ff; margin-right: 8px;
+    }
+    .error { color: #f85149; }
+    .warn { color: #d29922; font-size: 0.8rem; margin-top: 8px; }
+    .muted { color: #8b949e; }
+
+    .sim-grid { display: grid; grid-template-columns: 340px 1fr; gap: 24px; }
+    @media (max-width: 860px) { .sim-grid { grid-template-columns: 1fr; } }
+
+    .field { margin-bottom: 14px; }
+    .field label {
+      display: block; font-size: 0.75rem; color: #8b949e;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .field input { width: 100%; }
+    .field .hint { font-size: 0.75rem; color: #6e7681; margin-top: 4px; }
+    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .check { display: flex; gap: 8px; align-items: center; font-size: 0.85rem; color: #c9d1d9; margin-bottom: 8px; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+    }
+    .card { background: #0d1117; border: 1px solid #21262d; border-radius: 8px; padding: 14px; }
+    .card-label {
+      font-size: 0.72rem; color: #8b949e;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;
+    }
+    .card-value { font-size: 1.35rem; font-weight: 600; }
+    .card-sub { font-size: 0.78rem; color: #8b949e; margin-top: 4px; }
+    .up { color: #f0883e; }
+    .down { color: #58a6ff; }
+
+    .chart-controls { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+    .seg { display: inline-flex; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+    .seg button {
+      background: #21262d; color: #8b949e; border: none; border-right: 1px solid #30363d;
+      padding: 6px 14px; font-size: 0.8rem; cursor: pointer;
+    }
+    .seg button:last-child { border-right: none; }
+    .seg button:hover { color: #e6edf3; }
+    .seg button.active { background: #1f6feb; color: #fff; }
+    .spacer { flex: 1; }
+    .day-n { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #8b949e; }
+    .day-n input { width: 72px; padding: 5px 8px; font-size: 0.8rem; }
+    .card.highlight { border-color: #1f6feb; box-shadow: 0 0 0 1px #1f6feb55; }
+
+    .chart-container { position: relative; height: 380px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th {
+      text-align: left; padding: 8px 10px; white-space: nowrap;
+      color: #8b949e; border-bottom: 1px solid #21262d; font-weight: 500;
+    }
+    td { padding: 8px 10px; border-bottom: 1px solid #21262d; white-space: nowrap; }
+    td input { width: 110px; padding: 4px 6px; font-size: 0.8rem; }
+    .table-wrap { overflow-x: auto; }
+    .arrow { color: #6e7681; }
+
+    .notes { font-size: 0.78rem; color: #6e7681; line-height: 1.5; }
+    .notes code { color: #8b949e; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Borrow Rates Simulator</h1>
+    <span id="last-updated">Not yet loaded</span>
+  </header>
+
+  <section class="panel">
+    <div class="loader-row">
+      <input type="text" id="target-input" placeholder="Market ID (0x… 32 bytes) or vault address (0x… 20 bytes)" spellcheck="false">
+      <select id="chain-select"></select>
+      <button class="primary" id="load-btn" onclick="loadTarget()">Load</button>
+    </div>
+    <div class="entity" id="entity"></div>
+  </section>
+
+  <section class="panel" id="sim-panel" style="display:none">
+    <div class="sim-grid">
+      <div id="scenario-inputs"></div>
+      <div>
+        <div class="cards" id="summary-cards"></div>
+        <div id="sim-warnings"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="chart-panel" style="display:none">
+    <div class="chart-controls">
+      <div class="seg" id="metric-seg"></div>
+      <div class="spacer"></div>
+      <label class="check" style="margin:0"><input type="checkbox" id="in-rewards" checked> Include rewards</label>
+      <label class="day-n">Borrow APY at day <input type="text" id="in-day-n" placeholder="N" inputmode="decimal"></label>
+      <div class="seg" id="horizon-seg"></div>
+    </div>
+    <div class="chart-container">
+      <canvas id="projection-chart"></canvas>
+    </div>
+  </section>
+
+  <section class="panel" id="markets-panel" style="display:none">
+    <h2 id="markets-title">Underlying Markets</h2>
+    <div class="table-wrap">
+      <table id="markets-table">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="notes">
+    <p>Model: Morpho <code>AdaptiveCurveIrm</code>. Target utilization 90%, curve steepness 4, adjustment speed 50/yr,
+      rate at target clamped to [0.1%, 200%] APR. At 100% utilization the rate at target doubles about every 5 days,
+      and at 95% about every 10 days. Below target it decays symmetrically in normalized error (45% utilization halves it every ~10 days).
+      The simulation steps hourly and accrues interest on both borrow and supply, so utilization drifts upward unless that option is off.
+      Supply APY is borrow APY × utilization × (1 − market fee). Vault deposit APY is the position-weighted supply APY × (1 − performance fee) − management fee.
+      Markets whose IRM is not adaptive are held at their current rate.
+      Actions that would revert on-chain (borrows or withdrawals past liquidity, V1 deposits past caps) are skipped, not partly applied.
+      Vault deposits and withdrawals are applied before borrows. "Effective" APYs compound the simulated rate path over the period.
+      V2 deposits must fit the caps on the liquidity adapter (adapter, collateral and market; relative caps use pre-deposit total assets).
+      V2 total assets grow at most at the vault's max rate, so deposit APY is capped by it and any excess builds a buffer that pays out later.
+      Reward APRs are modelled as fixed yearly emissions at constant token prices, so they dilute as supply, borrow or vault assets grow.
+      Net APY follows Morpho's convention: APY + supply reward APR, or APY − borrow reward APR.
+      Vault rewards are vault-level programs only; market rewards earned by the vault's positions aren't assumed to reach depositors.
+      Estimates only, not financial advice.</p>
+  </section>
+
+  <script>
+// ── Config ──────────────────────────────────────────────────────────
+const MORPHO_GRAPHQL = "https://api.morpho.org/graphql";
+const DEFAULT_TARGET = "0x31A5684983EeE865d943A696AAC155363bA024f9"; // Vault Bridge WETH
+const DEFAULT_CHAIN_ID = 1;
+
+const FALLBACK_CHAINS = [
+  { id: 1, network: "Ethereum" }, { id: 8453, network: "Base" }, { id: 747474, network: "Katana" },
+  { id: 42161, network: "Arbitrum One" }, { id: 10, network: "OP Mainnet" }, { id: 137, network: "Polygon" },
+  { id: 130, network: "Unichain" }, { id: 999, network: "HyperEVM" },
+];
+const APP_SLUGS = {
+  1: "ethereum", 8453: "base", 747474: "katana", 42161: "arbitrum", 10: "optimism",
+  137: "polygon", 130: "unichain", 999: "hyperevm", 480: "worldchain", 143: "monad",
+};
+
+// AdaptiveCurveIrm constants (annualized, continuous)
+const SECONDS_PER_YEAR = 365 * 24 * 3600;
+const TARGET_UTILIZATION = 0.9;
+const CURVE_STEEPNESS = 4;
+const ADJUSTMENT_SPEED = 50;       // per year
+const MIN_RATE_AT_TARGET = 0.001;  // 0.1% APR
+const MAX_RATE_AT_TARGET = 2.0;    // 200% APR
+const STEP_YEARS = 1 / (365 * 24); // 1 hour
+const SAMPLES_PER_DAY = 4;
+
+// ── State ───────────────────────────────────────────────────────────
+// model = { kind: "market"|"vault", chainId, decimals, symbol, priceUsd, markets: {id: market}, vault?, marketId?, api: {...} }
+let model = null;
+let horizonDays = 30;
+let dayN = null; // optional day to evaluate the borrow APY at; extends the simulation if past the horizon
+let metric = null;
+let includeRewards = true;
+let chart = null;
+let lastScenPoints = null; // for the chart tooltip
+let loadSeq = 0;           // guards against out-of-order loads
+let rerunTimer = null;
+
+// ── IRM Math ────────────────────────────────────────────────────────
+
+function irmError(u) {
+  const norm = u > TARGET_UTILIZATION ? 1 - TARGET_UTILIZATION : TARGET_UTILIZATION;
+  return (u - TARGET_UTILIZATION) / norm;
+}
+
+function curve(rateAtTarget, err) {
+  const coeff = err < 0 ? 1 - 1 / CURVE_STEEPNESS : CURVE_STEEPNESS - 1;
+  return rateAtTarget * (coeff * err + 1);
+}
+
+function clampRateAtTarget(r) {
+  return Math.min(MAX_RATE_AT_TARGET, Math.max(MIN_RATE_AT_TARGET, r));
+}
+
+function utilizationOf(m) {
+  return m.supply > 0 ? Math.min(m.borrow / m.supply, 1) : 0;
+}
+
+// Instantaneous borrow APR (continuous) for a market's current state.
+function borrowRateOf(m) {
+  if (!m.adaptive) return m.fixedRate;
+  return curve(m.rateAtTarget, irmError(utilizationOf(m)));
+}
+
+const aprToApy = (r) => Math.expm1(r);
+
+function marketApys(m) {
+  const u = utilizationOf(m);
+  const borrowApy = aprToApy(borrowRateOf(m));
+  return { u, borrowApy, supplyApy: borrowApy * u * (1 - m.fee) };
+}
+
+// Reward APRs, modelled as fixed yearly emissions (constant token prices): APR scales with base₀ / base.
+function marketRewards(m) {
+  return {
+    supply: m.supplyRwd0 && m.supply > 0 ? m.supplyRwd0 * m.supplyRwdBase / m.supply : 0,
+    borrow: m.borrowRwd0 && m.borrow > 0 ? m.borrowRwd0 * m.borrowRwdBase / m.borrow : 0,
+  };
+}
+
+// ── Vault Math ──────────────────────────────────────────────────────
+// vault = { version: 1|2, name, address, perfFee, mgmtFee, idle,
+//           positions: [{ type: "market", marketId, assets, cap, supplyQueueIndex, withdrawQueueIndex }
+//                       | { type: "vault", vault, assets }],
+//           liquidityPosition: position|null (V2 only) }
+
+function vaultTotal(v) {
+  return v.idle + v.positions.reduce((s, p) => s + p.assets, 0);
+}
+
+function positionApy(p) {
+  return p.type === "market" ? marketApys(model.markets[p.marketId]).supplyApy : vaultNetApy(p.vault);
+}
+
+// V2 accrues min(realAssets, totalAssets · (1 + maxRate · dt)). A buffer (real assets above the accounted
+// totalAssets) that can't drain within one step means totalAssets is growing at maxRate.
+function v2HasBuffer(v) {
+  return vaultTotal(v) - v.accounted > v.accounted * v.maxRate * STEP_YEARS;
+}
+
+function vaultGrossApy(v) {
+  const total = vaultTotal(v);
+  if (total <= 0) return 0;
+  const real = v.positions.reduce((s, p) => s + p.assets * positionApy(p), 0) / total;
+  if (v.version !== 2) return real;
+  const maxApy = aprToApy(v.maxRate);
+  return v2HasBuffer(v) ? maxApy : Math.min(real, maxApy);
+}
+
+// Net of fees, excluding rewards.
+function vaultNetApy(v) {
+  return vaultGrossApy(v) * (1 - v.perfFee) - v.mgmtFee;
+}
+
+function vaultNetApyUncapped(v) {
+  const total = vaultTotal(v);
+  if (total <= 0) return 0;
+  return v.positions.reduce((s, p) => s + p.assets * positionApy(p), 0) / total * (1 - v.perfFee) - v.mgmtFee;
+}
+
+function vaultRewardApr(v) {
+  const total = vaultTotal(v);
+  return v.rwd0 && total > 0 ? v.rwd0 * v.rwdBase / total : 0;
+}
+
+// Borrow-side value f(market) across underlying markets, weighted by the vault's exposure to each.
+function vaultWeightedBorrow(v, f) {
+  const exposure = {};
+  collectExposure(v, 1, exposure);
+  let w = 0, acc = 0;
+  for (const [id, amt] of Object.entries(exposure)) {
+    const m = model.markets[id];
+    if (!m || !m.borrowable) continue;
+    acc += amt * f(m);
+    w += amt;
+  }
+  return w > 0 ? acc / w : 0;
+}
+
+const vaultBorrowApy = (v) => vaultWeightedBorrow(v, (m) => marketApys(m).borrowApy);
+const vaultBorrowRate = (v) => vaultWeightedBorrow(v, borrowRateOf);
+const vaultBorrowRewardApr = (v) => vaultWeightedBorrow(v, (m) => marketRewards(m).borrow);
+
+function collectExposure(v, scale, out) {
+  for (const p of v.positions) {
+    if (p.type === "market") out[p.marketId] = (out[p.marketId] || 0) + p.assets * scale;
+    else {
+      const t = vaultTotal(p.vault);
+      if (t > 0) collectExposure(p.vault, scale * p.assets / t, out);
+    }
+  }
+}
+
+function marketLiquidity(m) {
+  return Math.max(0, m.supply - m.borrow);
+}
+
+// V2 caps touched by allocating to the liquidity adapter: the adapter's own id and, for a market adapter,
+// the market's collateral id and market id (the ids MorphoMarketV1Adapter returns).
+function v2LiquidityCaps(v) {
+  const lp = v.liquidityPosition;
+  if (!lp || !v.caps) return [];
+  const adapter = v.liquidityAdapter?.toLowerCase();
+  const m = lp.type === "market" ? model.markets[lp.marketId] : null;
+  return v.caps.filter((c) =>
+    (c.type === "Adapter" && c.adapter === adapter) ||
+    (m && c.type === "Collateral" && c.collateral === m.collateralAddress) ||
+    (m && c.type === "MarketV1" && c.marketId === lp.marketId && c.adapter === adapter));
+}
+
+// Room under a cap. Relative caps use totalAssets before the deposit (VaultV2's firstTotalAssets).
+function capRoom(c, v) {
+  if (c.absolute <= 0) return 0; // ZeroAbsoluteCap
+  const rel = c.relative < 1 ? c.relative * v.accounted : Infinity;
+  return Math.max(0, Math.min(c.absolute, rel) - c.allocation);
+}
+
+// Largest deposit that doesn't revert. V1 reverts (AllCapsReached) past the room left under supply-queue caps;
+// V2 reverts when the allocation to the liquidity adapter breaks any of its caps (or a V1 vault behind it hits its caps).
+function vaultMaxDeposit(v) {
+  if (v.version === 1) {
+    return v.positions
+      .filter((p) => p.supplyQueueIndex != null)
+      .reduce((s, p) => s + Math.max(0, p.cap - p.assets), 0);
+  }
+  const lp = v.liquidityPosition;
+  if (!lp) return Infinity;
+  const room = v2LiquidityCaps(v).reduce((r, c) => Math.min(r, capRoom(c, v)), Infinity);
+  return lp.type === "vault" ? Math.min(room, vaultMaxDeposit(lp.vault)) : room;
+}
+
+// Largest withdrawal that doesn't revert. V1 walks the withdraw queue (NotEnoughLiquidity past it);
+// V2 uses idle assets, then the liquidity adapter.
+function vaultMaxWithdraw(v) {
+  if (v.version === 1) {
+    return v.positions
+      .filter((p) => p.withdrawQueueIndex != null)
+      .reduce((s, p) => s + Math.min(p.assets, marketLiquidity(model.markets[p.marketId])), 0);
+  }
+  const lp = v.liquidityPosition;
+  if (!lp) return v.idle;
+  const fromAdapter = lp.type === "market"
+    ? Math.min(lp.assets, marketLiquidity(model.markets[lp.marketId]))
+    : Math.min(lp.assets, vaultMaxWithdraw(lp.vault));
+  return v.idle + fromAdapter;
+}
+
+// Route a deposit that fits within vaultMaxDeposit.
+function vaultDeposit(v, amount) {
+  if (v.version === 1) {
+    let left = amount;
+    const queue = v.positions
+      .filter((p) => p.supplyQueueIndex != null)
+      .sort((a, b) => a.supplyQueueIndex - b.supplyQueueIndex);
+    for (const p of queue) {
+      if (left <= 0) break;
+      const x = Math.min(left, Math.max(0, p.cap - p.assets));
+      p.assets += x;
+      model.markets[p.marketId].supply += x;
+      left -= x;
+    }
+    return;
+  }
+  v.accounted += amount;
+  const lp = v.liquidityPosition;
+  if (!lp) { v.idle += amount; return; }
+  for (const c of v2LiquidityCaps(v)) c.allocation += amount;
+  lp.assets += amount;
+  if (lp.type === "market") model.markets[lp.marketId].supply += amount;
+  else vaultDeposit(lp.vault, amount);
+}
+
+// Route a withdrawal that fits within vaultMaxWithdraw.
+function vaultWithdraw(v, amount) {
+  if (v.version === 1) {
+    let left = amount;
+    const queue = v.positions
+      .filter((p) => p.withdrawQueueIndex != null)
+      .sort((a, b) => a.withdrawQueueIndex - b.withdrawQueueIndex);
+    for (const p of queue) {
+      if (left <= 0) break;
+      const m = model.markets[p.marketId];
+      const x = Math.min(left, p.assets, marketLiquidity(m));
+      p.assets -= x;
+      m.supply -= x;
+      left -= x;
+    }
+    return;
+  }
+  v.accounted -= amount;
+  const fromIdle = Math.min(amount, v.idle);
+  v.idle -= fromIdle;
+  const left = amount - fromIdle;
+  const lp = v.liquidityPosition;
+  if (left <= 0 || !lp) return;
+  for (const c of v2LiquidityCaps(v)) c.allocation = Math.max(0, c.allocation - left);
+  lp.assets -= left;
+  if (lp.type === "market") model.markets[lp.marketId].supply -= left;
+  else vaultWithdraw(lp.vault, left);
+}
+
+// ── Simulation ──────────────────────────────────────────────────────
+
+function cloneState(src) {
+  const markets = {};
+  for (const [id, m] of Object.entries(src.markets)) markets[id] = { ...m };
+  const cloneVault = (v) => {
+    const positions = v.positions.map((p) =>
+      p.type === "vault" ? { ...p, vault: cloneVault(p.vault) } : { ...p });
+    const liquidityPosition = v.liquidityPosition ? positions[v.positions.indexOf(v.liquidityPosition)] : null;
+    return { ...v, positions, liquidityPosition, caps: v.caps?.map((c) => ({ ...c })) };
+  };
+  return { ...src, markets, vault: src.vault ? cloneVault(src.vault) : null };
+}
+
+function readNum(id) {
+  const el = document.getElementById(id);
+  if (!el) return null;
+  const raw = el.value.trim().replace(/,/g, "");
+  if (raw === "") return null;
+  const v = Number(raw);
+  const ok = Number.isFinite(v);
+  el.classList.toggle("invalid", !ok);
+  return ok ? v : null;
+}
+
+// Apply the user's scenario at t = 0. Returns warnings.
+// Actions that would revert on-chain are skipped whole (never partially applied), with a warning.
+function applyScenario(state) {
+  const warnings = [];
+  const sym = state.symbol;
+  const exceeds = (x, max) => x > max + 1e-9 * Math.max(1, max);
+
+  const applyBorrowDelta = (m, delta, label) => {
+    if (!delta) return;
+    if (delta > 0 && exceeds(delta, marketLiquidity(m))) {
+      warnings.push(`${label}: borrow of ${fmtAmt(delta, sym)} skipped. It exceeds liquidity of ${fmtAmt(marketLiquidity(m), sym)} and would revert.`);
+    } else if (delta < 0 && exceeds(-delta, m.borrow)) {
+      warnings.push(`${label}: repay of ${fmtAmt(-delta, sym)} skipped. It exceeds total borrow of ${fmtAmt(m.borrow, sym)}.`);
+    } else {
+      m.borrow = Math.max(0, m.borrow + delta);
+    }
+  };
+
+  if (state.kind === "market") {
+    const m = state.markets[state.marketId];
+    const supplyDelta = readNum("in-supply-delta") || 0;
+    if (supplyDelta < 0 && exceeds(-supplyDelta, marketLiquidity(m))) {
+      warnings.push(`Withdrawal of ${fmtAmt(-supplyDelta, sym)} skipped. It exceeds liquidity of ${fmtAmt(marketLiquidity(m), sym)} and would revert.`);
+    } else {
+      m.supply = Math.max(0, m.supply + supplyDelta);
+    }
+    applyBorrowDelta(m, readNum("in-borrow-delta") || 0, "Market");
+
+    const utilOverride = readNum("in-util");
+    if (utilOverride != null) m.borrow = Math.min(Math.max(utilOverride, 0), 100) / 100 * m.supply;
+  } else {
+    // Vault flow first, so borrows see the liquidity a deposit adds (or a withdrawal removes).
+    const dep = readNum("in-deposit") || 0;
+    if (dep > 0) {
+      const max = vaultMaxDeposit(state.vault);
+      if (exceeds(dep, max)) warnings.push(`Deposit of ${fmtAmt(dep, sym)} skipped. ${state.vault.version === 1 ? "Supply-queue caps" : "Caps on the liquidity adapter"} only have room for ${fmtAmt(max, sym)}, so it would revert.`);
+      else vaultDeposit(state.vault, dep);
+    } else if (dep < 0) {
+      const max = vaultMaxWithdraw(state.vault);
+      if (exceeds(-dep, max)) warnings.push(`Withdrawal of ${fmtAmt(-dep, sym)} skipped. Only ${fmtAmt(max, sym)} is withdrawable, so it would revert.`);
+      else vaultWithdraw(state.vault, -dep);
+    }
+    for (const id of Object.keys(state.markets)) {
+      const d = readNum(`in-mkt-borrow-${id}`);
+      if (d) applyBorrowDelta(state.markets[id], d, state.markets[id].label);
+    }
+  }
+
+  const ratOverride = readNum("in-rate-at-target");
+  if (ratOverride != null && state.kind === "market") {
+    const m = state.markets[state.marketId];
+    if (m.adaptive) m.rateAtTarget = clampRateAtTarget(Math.log1p(ratOverride / 100));
+  }
+  return warnings;
+}
+
+function stepVaultGrowth(v, growth) {
+  // growth[marketId] = supplier growth factor - 1 for this step
+  const before = vaultTotal(v);
+  for (const p of v.positions) {
+    if (p.type === "market") p.assets *= 1 + (growth[p.marketId] || 0);
+    else {
+      const subBefore = vaultTotal(p.vault);
+      stepVaultGrowth(p.vault, growth);
+      const subGross = subBefore > 0 ? vaultTotal(p.vault) / subBefore - 1 : 0;
+      p.assets *= 1 + subGross * (1 - p.vault.perfFee);
+    }
+  }
+  if (v.version === 2) v.accounted = Math.min(vaultTotal(v), v.accounted * (1 + v.maxRate * STEP_YEARS));
+  return before;
+}
+
+function sample(state, day) {
+  const out = { day };
+  if (state.kind === "market") {
+    const a = marketApys(state.markets[state.marketId]);
+    out.borrow = a.borrowApy;
+    out.borrowRate = borrowRateOf(state.markets[state.marketId]);
+    out.supply = a.supplyApy;
+    out.util = a.u;
+    out.rateAtTarget = state.markets[state.marketId].rateAtTarget;
+    const rw = marketRewards(state.markets[state.marketId]);
+    out.borrowRwd = rw.borrow;
+    out.supplyRwd = rw.supply;
+  } else {
+    out.deposit = vaultNetApy(state.vault);
+    out.depositRwd = vaultRewardApr(state.vault);
+    out.borrow = vaultBorrowApy(state.vault);
+    out.borrowRwd = vaultBorrowRewardApr(state.vault);
+    out.borrowRate = vaultBorrowRate(state.vault);
+    out.util = vaultUtilization(state.vault);
+    if (state.vault.version === 2) out.maxRateBinding = v2HasBuffer(state.vault) || vaultNetApy(state.vault) < vaultNetApyUncapped(state.vault) - 1e-12;
+  }
+  // Morpho's convention: net APY = APY ± reward APR (rewards reduce what borrowers pay).
+  out.borrowNet = out.borrow - (out.borrowRwd || 0);
+  if (out.supply != null) out.supplyNet = out.supply + (out.supplyRwd || 0);
+  if (out.deposit != null) out.depositNet = out.deposit + (out.depositRwd || 0);
+  return out;
+}
+
+function vaultUtilization(v) {
+  const exposure = {};
+  collectExposure(v, 1, exposure);
+  let w = 0, acc = 0;
+  for (const [id, amt] of Object.entries(exposure)) {
+    acc += amt * utilizationOf(model.markets[id]);
+    w += amt;
+  }
+  const idle = v.idle; // idle assets count as unutilized
+  return w + idle > 0 ? acc / (w + idle) : 0;
+}
+
+function simulate(base, { withScenario, compound }) {
+  const saved = model;
+  const state = cloneState(base);
+  model = state; // vault helpers resolve markets through `model`
+  try {
+    const warnings = withScenario ? applyScenario(state) : [];
+    const points = [sample(state, 0)];
+    const stepsPerSample = Math.round(1 / SAMPLES_PER_DAY / (STEP_YEARS * 365));
+    const totalSamples = Math.ceil(simDays() * SAMPLES_PER_DAY);
+
+    for (let s = 1; s <= totalSamples; s++) {
+      for (let k = 0; k < stepsPerSample; k++) {
+        const growth = {};
+        for (const [id, m] of Object.entries(state.markets)) {
+          const u = utilizationOf(m);
+          let rate;
+          if (m.adaptive) {
+            const start = m.rateAtTarget;
+            const end = clampRateAtTarget(start * Math.exp(ADJUSTMENT_SPEED * irmError(u) * STEP_YEARS));
+            m.rateAtTarget = end;
+            rate = curve((start + end) / 2, irmError(u));
+          } else {
+            rate = m.fixedRate;
+          }
+          if (compound && m.supply > 0) {
+            const interest = m.borrow * Math.expm1(rate * STEP_YEARS);
+            growth[id] = interest * (1 - m.fee) / m.supply;
+            m.borrow += interest;
+            m.supply += interest;
+          }
+        }
+        if (compound && state.vault) stepVaultGrowth(state.vault, growth);
+      }
+      points.push(sample(state, s / SAMPLES_PER_DAY));
+    }
+    return { points, warnings };
+  } finally {
+    model = saved;
+  }
+}
+
+// ── Data Fetching ───────────────────────────────────────────────────
+
+async function gql(query) {
+  const res = await fetch(MORPHO_GRAPHQL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+  let json;
+  try { json = await res.json(); } catch { throw new Error(`Morpho API returned HTTP ${res.status}.`); }
+  if (json.errors) {
+    const err = new Error(json.errors[0].message);
+    err.status = json.errors[0].status;
+    throw err;
+  }
+  if (!res.ok) throw new Error(`Morpho API returned HTTP ${res.status}.`);
+  return json.data;
+}
+
+const isNotFound = (e) => e?.status === "NOT_FOUND" || /no results/i.test(e?.message || "");
+const isHex = (s, bytes) => new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`).test(s || "");
+
+const ASSET_FIELDS = `address symbol decimals priceUsd`;
+const MARKET_FIELDS = `
+  marketId lltv irmAddress
+  loanAsset { ${ASSET_FIELDS} }
+  collateralAsset { address symbol }
+  state {
+    borrowApy supplyApy netBorrowApy netSupplyApy utilization borrowAssets supplyAssets liquidityAssets rateAtTarget fee timestamp
+    rewards { asset { symbol } supplyApr borrowApr }
+  }`;
+const V1_FIELDS = `
+  address name symbol
+  asset { ${ASSET_FIELDS} }
+  state {
+    totalAssets totalAssetsUsd apy netApy netApyExcludingRewards fee
+    allRewards { asset { symbol } supplyApr }
+    allocation {
+      supplyAssets supplyCap supplyQueueIndex withdrawQueueIndex
+      market { ${MARKET_FIELDS} }
+    }
+  }`;
+
+async function fetchChains() {
+  try {
+    const d = await gql(`{ chains { id network } }`);
+    return d.chains.length ? d.chains : FALLBACK_CHAINS;
+  } catch (e) {
+    return FALLBACK_CHAINS;
+  }
+}
+
+async function fetchMarket(id, chainId) {
+  const d = await gql(`{ marketById(marketId: "${id}", chainId: ${chainId}) { ${MARKET_FIELDS} } }`);
+  return d.marketById;
+}
+
+async function fetchMarkets(ids, chainId) {
+  ids = ids.filter((i) => isHex(i, 32));
+  if (!ids.length) return [];
+  const list = ids.map((i) => `"${i}"`).join(",");
+  const d = await gql(`{ markets(first: ${ids.length}, where: { uniqueKey_in: [${list}], chainId_in: [${chainId}] }) { items { ${MARKET_FIELDS} } } }`);
+  return d.markets.items;
+}
+
+async function fetchVaultV1(address, chainId) {
+  if (!isHex(address, 20)) throw new Error(`Invalid vault address: ${address}`);
+  const d = await gql(`{ vaultByAddress(address: "${address}", chainId: ${chainId}) { ${V1_FIELDS} } }`);
+  return d.vaultByAddress;
+}
+
+async function fetchVaultV2(address, chainId) {
+  const d = await gql(`{ vaultV2ByAddress(address: "${address}", chainId: ${chainId}) {
+    address name symbol
+    asset { ${ASSET_FIELDS} }
+    totalAssets idleAssets performanceFee managementFee apy netApy netApyExcludingRewards maxRate
+    rewards { asset { symbol } supplyApr }
+    liquidityAdapter { address }
+    caps(first: 100) {
+      pageInfo { countTotal }
+      items {
+        type absoluteCap relativeCap allocation
+        data {
+          ... on AdapterCapData { adapterAddress }
+          ... on CollateralCapData { collateralAddress }
+          ... on MarketV1CapData { adapterAddress market { marketId } }
+        }
+      }
+    }
+    liquidityData {
+      __typename
+      ... on MarketV1LiquidityData { market { marketId } }
+      ... on MetaMorphoLiquidityData { metaMorpho { address } }
+    }
+    adapters { items {
+      address type assets
+      ... on MetaMorphoAdapter { metaMorpho { address } }
+      ... on MorphoMarketV1Adapter { positions(first: 100) { items { state { supplyAssets } market { marketId } } pageInfo { countTotal } } }
+    } }
+  } }`);
+  return d.vaultV2ByAddress;
+}
+
+// ── Model Building ──────────────────────────────────────────────────
+
+const toUnits = (raw, decimals) => Number(raw || 0) / 10 ** decimals;
+
+function sumApr(rewards, key) {
+  return (rewards || []).reduce((s, r) => s + Number(r[key] || 0), 0);
+}
+
+function rewardLabel(rewards, key) {
+  return [...new Set((rewards || []).filter((r) => r[key] > 0).map((r) => r.asset?.symbol).filter(Boolean))].join(", ");
+}
+
+function rewardFields(rewards, supply, borrow) {
+  return {
+    supplyRwd0: sumApr(rewards, "supplyApr"), supplyRwdBase: supply, supplyRwdTokens: rewardLabel(rewards, "supplyApr"),
+    borrowRwd0: sumApr(rewards, "borrowApr"), borrowRwdBase: borrow, borrowRwdTokens: rewardLabel(rewards, "borrowApr"),
+  };
+}
+
+function buildMarket(api) {
+  const dec = api.loanAsset.decimals;
+  const s = api.state || {};
+  const rat = s.rateAtTarget != null ? Number(s.rateAtTarget) / 1e18 * SECONDS_PER_YEAR : null;
+  const lltv = Number(api.lltv || 0) / 1e18;
+  return {
+    id: api.marketId,
+    label: api.collateralAsset ? `${api.collateralAsset.symbol} / ${api.loanAsset.symbol}` : `Idle ${api.loanAsset.symbol}`,
+    collateral: api.collateralAsset?.symbol || "idle",
+    lltv,
+    supply: toUnits(s.supplyAssets, dec),
+    borrow: toUnits(s.borrowAssets, dec),
+    fee: Number(s.fee || 0),
+    adaptive: rat != null && rat > 0,
+    rateAtTarget: rat,
+    fixedRate: Math.log1p(Number(s.borrowApy || 0)),
+    borrowable: !!api.collateralAsset,
+    collateralAddress: api.collateralAsset?.address?.toLowerCase() || null,
+    apiBorrowApy: s.borrowApy,
+    apiSupplyApy: s.supplyApy,
+    apiNetBorrowApy: s.netBorrowApy,
+    apiNetSupplyApy: s.netSupplyApy,
+    ...rewardFields(s.rewards, toUnits(s.supplyAssets, dec), toUnits(s.borrowAssets, dec)),
+  };
+}
+
+function buildV1(api, markets) {
+  const dec = api.asset.decimals;
+  const positions = (api.state.allocation || []).map((a) => {
+    if (!markets[a.market.marketId]) markets[a.market.marketId] = buildMarket(a.market);
+    return {
+      type: "market",
+      marketId: a.market.marketId,
+      assets: toUnits(a.supplyAssets, dec),
+      cap: toUnits(a.supplyCap, dec),
+      supplyQueueIndex: a.supplyQueueIndex,
+      withdrawQueueIndex: a.withdrawQueueIndex,
+    };
+  });
+  const vault = {
+    version: 1, name: api.name, address: api.address,
+    perfFee: Number(api.state.fee || 0), mgmtFee: 0, idle: 0,
+    positions, liquidityPosition: null,
+    apiApy: api.state.apy, apiNetApy: api.state.netApy, apiNetApyExRewards: api.state.netApyExcludingRewards,
+    rwd0: sumApr(api.state.allRewards, "supplyApr"), rwdTokens: rewardLabel(api.state.allRewards, "supplyApr"),
+  };
+  vault.rwdBase = vaultTotal(vault);
+  vault.loadWarnings = coverageWarnings(vault, toUnits(api.state.totalAssets, dec), [], api.asset.symbol);
+  return vault;
+}
+
+// Warn when the modelled positions don't add up to the vault's reported total.
+function coverageWarnings(vault, apiTotal, reasons, sym) {
+  const missing = apiTotal - vaultTotal(vault);
+  if (!(apiTotal > 0) || missing <= apiTotal * 1e-3) return [];
+  return [`${fmtAmt(missing, sym)} (${fmtPct(missing / apiTotal, 1)}) of ${vault.name}'s assets aren't modelled` +
+    (reasons.length ? ` (${reasons.join("; ")})` : "") + ". APYs are computed over the rest."];
+}
+
+async function buildV2(api, chainId, markets) {
+  const dec = api.asset.decimals;
+  const sym = api.asset.symbol;
+  const positions = [];
+  const marketIds = new Set();
+  const subVaults = [];
+  const reasons = [];
+
+  for (const ad of api.adapters.items) {
+    if (ad.positions) {
+      const { items, pageInfo } = ad.positions;
+      if (pageInfo?.countTotal > items.length) reasons.push(`${pageInfo.countTotal - items.length} market positions past the first ${items.length}`);
+      for (const p of items) {
+        const assets = toUnits(p.state?.supplyAssets, dec);
+        if (assets <= 0) continue;
+        positions.push({ type: "market", marketId: p.market.marketId, assets });
+        marketIds.add(p.market.marketId);
+      }
+    } else if (ad.metaMorpho) {
+      subVaults.push({ address: ad.metaMorpho.address, assets: toUnits(ad.assets, dec) });
+    } else if (toUnits(ad.assets, dec) > 0) {
+      reasons.push(`unsupported ${ad.type} adapter`);
+    }
+  }
+
+  const ld = api.liquidityData;
+  if (ld?.market && !positions.some((p) => p.marketId === ld.market.marketId)) {
+    positions.push({ type: "market", marketId: ld.market.marketId, assets: 0 });
+    marketIds.add(ld.market.marketId);
+  }
+
+  const missing = [...marketIds].filter((id) => !markets[id]);
+  try {
+    for (const m of await fetchMarkets(missing, chainId)) markets[m.marketId] = buildMarket(m);
+  } catch (e) {
+    reasons.push(`market data failed to load: ${e.message}`);
+  }
+  const known = positions.filter((p) => markets[p.marketId]);
+  if (known.length < positions.length) reasons.push(`${positions.length - known.length} markets not found`);
+
+  const subWarnings = [];
+  for (const sv of subVaults) {
+    try {
+      const subApi = await fetchVaultV1(sv.address, chainId);
+      if (!subApi) throw new Error("not found");
+      const sub = buildV1(subApi, markets);
+      subWarnings.push(...sub.loadWarnings);
+      known.push({ type: "vault", vault: sub, assets: sv.assets });
+    } catch (e) {
+      reasons.push(`vault ${sv.address} failed to load: ${e.message}`);
+    }
+  }
+
+  let liquidityPosition = null;
+  if (ld?.market) liquidityPosition = known.find((p) => p.marketId === ld.market.marketId) || null;
+  if (ld?.metaMorpho) liquidityPosition = known.find((p) => p.type === "vault" &&
+    p.vault.address.toLowerCase() === ld.metaMorpho.address.toLowerCase()) || null;
+
+  const vault = {
+    version: 2, name: api.name, address: api.address,
+    perfFee: Number(api.performanceFee || 0), mgmtFee: Number(api.managementFee || 0),
+    idle: toUnits(api.idleAssets, dec),
+    positions: known, liquidityPosition,
+    apiApy: api.apy, apiNetApy: api.netApy, apiNetApyExRewards: api.netApyExcludingRewards,
+    rwd0: sumApr(api.rewards, "supplyApr"), rwdTokens: rewardLabel(api.rewards, "supplyApr"),
+    maxRate: Number(api.maxRate || 0) / 1e18 * SECONDS_PER_YEAR,
+    liquidityAdapter: api.liquidityAdapter?.address || null,
+    caps: api.caps.items.map((c) => ({
+      type: c.type,
+      absolute: toUnits(c.absoluteCap, dec),
+      relative: Number(c.relativeCap) / 1e18,
+      allocation: toUnits(c.allocation, dec),
+      adapter: c.data?.adapterAddress?.toLowerCase() || null,
+      collateral: c.data?.collateralAddress?.toLowerCase() || null,
+      marketId: c.data?.market?.marketId || null,
+    })),
+  };
+  if (api.caps.pageInfo?.countTotal > api.caps.items.length) reasons.push(`only the first ${api.caps.items.length} of ${api.caps.pageInfo.countTotal} caps loaded`);
+  vault.rwdBase = vaultTotal(vault);
+  // Accounted totalAssets: the API's figure if positions fully cover it (any excess is a max-rate buffer),
+  // otherwise what's modelled, so missing positions don't read as a buffer.
+  const apiTotal = toUnits(api.totalAssets, dec);
+  vault.accounted = apiTotal > 0 && apiTotal <= vault.rwdBase ? apiTotal : vault.rwdBase;
+  vault.loadWarnings = [...coverageWarnings(vault, apiTotal, reasons, sym), ...subWarnings];
+  return vault;
+}
+
+// ── Loading ─────────────────────────────────────────────────────────
+
+async function loadTarget() {
+  const input = document.getElementById("target-input");
+  const target = input.value.trim();
+  const chainId = Number(document.getElementById("chain-select").value);
+  const entity = document.getElementById("entity");
+  const btn = document.getElementById("load-btn");
+
+  const isMarket = /^0x[0-9a-fA-F]{64}$/.test(target);
+  const isAddress = /^0x[0-9a-fA-F]{40}$/.test(target);
+  if (!isMarket && !isAddress) {
+    entity.innerHTML = `<span class="error">Enter a market ID (66 hex chars) or a vault address (42 hex chars).</span>`;
+    return;
+  }
+
+  const seq = ++loadSeq;
+  btn.disabled = true;
+  btn.textContent = "Loading…";
+  entity.textContent = "Loading…";
+
+  try {
+    const markets = {};
+    let next;
+    if (isMarket) {
+      const api = await fetchMarket(target, chainId).catch((e) => {
+        throw isNotFound(e) ? new Error("No Morpho market with that ID on this chain.") : e;
+      });
+      const m = buildMarket(api);
+      markets[m.id] = m;
+      next = {
+        kind: "market", chainId, marketId: m.id, markets,
+        symbol: api.loanAsset.symbol, decimals: api.loanAsset.decimals, priceUsd: api.loanAsset.priceUsd,
+      };
+    } else {
+      const settled = await Promise.allSettled([fetchVaultV1(target, chainId), fetchVaultV2(target, chainId)]);
+      const [v1, v2] = settled.map((r) => (r.status === "fulfilled" ? r.value : null));
+      if (!v1 && !v2) {
+        const failure = settled.find((r) => r.status === "rejected" && !isNotFound(r.reason));
+        throw failure ? failure.reason : new Error("No Morpho vault at that address on this chain.");
+      }
+      const api = v1 || v2;
+      const vault = v1 ? buildV1(v1, markets) : await buildV2(v2, chainId, markets);
+      next = {
+        kind: "vault", chainId, vault, markets,
+        symbol: api.asset.symbol, decimals: api.asset.decimals, priceUsd: api.asset.priceUsd,
+      };
+    }
+    if (seq !== loadSeq) return; // a newer load superseded this one
+    model = next;
+    metric = model.kind === "market" ? "borrow" : "deposit";
+    syncUrl(target, chainId);
+    renderEntity();
+    renderScenarioInputs();
+    renderControls();
+    document.getElementById("sim-panel").style.display = "block";
+    document.getElementById("chart-panel").style.display = "block";
+    rerun();
+    document.getElementById("last-updated").textContent = `Last updated: ${new Date().toLocaleString()}`;
+  } catch (e) {
+    if (seq !== loadSeq) return;
+    console.error(e);
+    entity.innerHTML = `<span class="error">${escapeHtml(e.message)}</span>`;
+  } finally {
+    if (seq === loadSeq) {
+      btn.disabled = false;
+      btn.textContent = "Load";
+    }
+  }
+}
+
+function syncUrl(target, chainId) {
+  const url = new URL(location.href);
+  url.searchParams.set("id", target);
+  url.searchParams.set("chain", chainId);
+  history.replaceState(null, "", url);
+}
+
+// ── Rendering ───────────────────────────────────────────────────────
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtPct(v, digits = 2) {
+  if (v == null || isNaN(v)) return "—";
+  return (v * 100).toFixed(digits) + "%";
+}
+
+function fmtAmt(v, sym) {
+  if (v == null || isNaN(v)) return "—";
+  const abs = Math.abs(v);
+  const digits = abs >= 1e6 ? 0 : abs >= 1000 ? 1 : abs >= 1 ? 2 : 4;
+  return v.toLocaleString(undefined, { maximumFractionDigits: digits }) + (sym ? " " + sym : "");
+}
+
+function fmtUsd(v) {
+  if (v == null || isNaN(v) || !model?.priceUsd) return "";
+  return "$" + (v * model.priceUsd).toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+function deltaClass(a, b) {
+  if (a == null || b == null || Math.abs(a - b) < 1e-9) return "";
+  return b > a ? "up" : "down";
+}
+
+function renderEntity() {
+  const slug = APP_SLUGS[model.chainId];
+  let html;
+  if (model.kind === "market") {
+    const m = model.markets[model.marketId];
+    const link = slug ? `https://app.morpho.org/${slug}/market/${m.id}` : null;
+    html = `<span class="badge">Market</span>${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(m.label)} &#8599;</a>` : escapeHtml(m.label)}
+      <span class="muted"> · LLTV ${fmtPct(m.lltv, 1)} · fee ${fmtPct(m.fee, 0)}${m.adaptive ? "" : " · non-adaptive IRM (rate held constant)"}</span>`;
+  } else {
+    const v = model.vault;
+    const link = slug ? `https://app.morpho.org/${slug}/vault/${v.address}` : null;
+    const fees = `perf fee ${fmtPct(v.perfFee, 0)}${v.mgmtFee ? ` · mgmt fee ${fmtPct(v.mgmtFee, 2)}` : ""}`;
+    html = `<span class="badge">Vault V${v.version}</span>${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener">${escapeHtml(v.name)} &#8599;</a>` : escapeHtml(v.name)}
+      <span class="muted"> · ${escapeHtml(fmtAmt(vaultTotal(v), model.symbol))} ${fmtUsd(vaultTotal(v)) ? "(" + fmtUsd(vaultTotal(v)) + ")" : ""} · ${fees}</span>`;
+  }
+  document.getElementById("entity").innerHTML = html;
+}
+
+function renderScenarioInputs() {
+  const sym = model.symbol;
+  const el = document.getElementById("scenario-inputs");
+  if (model.kind === "market") {
+    const m = model.markets[model.marketId];
+    el.innerHTML = `
+      <div class="field-row">
+        <div class="field">
+          <label>Supply Δ (${escapeHtml(sym)})</label>
+          <input type="text" id="in-supply-delta" placeholder="0">
+          <div class="hint">+ lend, − withdraw</div>
+        </div>
+        <div class="field">
+          <label>Borrow Δ (${escapeHtml(sym)})</label>
+          <input type="text" id="in-borrow-delta" placeholder="0">
+          <div class="hint">+ borrow, − repay</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>Utilization override (%)</label>
+        <input type="text" id="in-util" placeholder="${(utilizationOf(m) * 100).toFixed(2)}">
+        <div class="hint">Sets borrow = util × supply after the deltas</div>
+      </div>
+      <div class="field">
+        <label>Rate at target override (APY %)</label>
+        <input type="text" id="in-rate-at-target" placeholder="${m.adaptive ? (aprToApy(m.rateAtTarget) * 100).toFixed(3) : "n/a"}" ${m.adaptive ? "" : "disabled"}>
+        <div class="hint">Borrow APY the IRM would charge at 90% utilization</div>
+      </div>
+      ${commonInputs()}`;
+  } else {
+    el.innerHTML = `
+      <div class="field">
+        <label>Vault deposit Δ (${escapeHtml(sym)})</label>
+        <input type="text" id="in-deposit" placeholder="0">
+        <div class="hint">${model.vault.version === 1
+          ? "+ deposit (routed through the supply queue, capped by caps), − withdraw (through the withdraw queue, limited by liquidity)"
+          : "+ deposit (to the liquidity adapter, else idle), − withdraw (idle first, then the liquidity adapter)"}</div>
+      </div>
+      <div class="muted" style="font-size:0.75rem;margin-bottom:14px">To simulate borrowers in the underlying markets, edit Borrow Δ in the table below.</div>
+      ${commonInputs()}`;
+  }
+  el.querySelectorAll("input[type=text]").forEach((i) => i.addEventListener("input", onInput));
+  document.getElementById("in-compound").addEventListener("change", rerun);
+  document.querySelector("#markets-table tbody").innerHTML = "";
+}
+
+function commonInputs() {
+  return `
+    <label class="check"><input type="checkbox" id="in-compound" checked> Accrue interest (utilization drifts up)</label>
+    <button class="ghost" onclick="resetScenario()">Reset scenario</button>`;
+}
+
+function onInput(e) {
+  e.target.classList.toggle("edited", e.target.value.trim() !== "");
+  scheduleRerun();
+}
+
+// Typing re-simulates up to ~87k hourly steps per run; coalesce keystrokes.
+function scheduleRerun() {
+  clearTimeout(rerunTimer);
+  rerunTimer = setTimeout(rerun, 120);
+}
+
+function resetScenario() {
+  document.querySelectorAll("#scenario-inputs input[type=text], #markets-table input").forEach((i) => {
+    i.value = "";
+    i.classList.remove("edited", "invalid");
+  });
+  rerun();
+}
+
+function renderControls() {
+  const metrics = model.kind === "market"
+    ? [["borrow", "Borrow APY"], ["supply", "Supply (lend) APY"]]
+    : [["deposit", "Deposit APY"], ["borrow", "Borrow APY (weighted)"]];
+  document.getElementById("metric-seg").innerHTML = metrics
+    .map(([k, l]) => `<button data-k="${k}" class="${k === metric ? "active" : ""}">${l}</button>`).join("");
+  document.querySelectorAll("#metric-seg button").forEach((b) => b.onclick = () => {
+    metric = b.dataset.k;
+    document.querySelectorAll("#metric-seg button").forEach((x) => x.classList.toggle("active", x === b));
+    rerun();
+  });
+
+  document.getElementById("horizon-seg").innerHTML = [7, 30, 60, 90, 180]
+    .map((d) => `<button data-d="${d}" class="${d === horizonDays ? "active" : ""}">${d}d</button>`).join("");
+  document.querySelectorAll("#horizon-seg button").forEach((b) => b.onclick = () => {
+    horizonDays = Number(b.dataset.d);
+    document.querySelectorAll("#horizon-seg button").forEach((x) => x.classList.toggle("active", x === b));
+    rerun();
+  });
+}
+
+// Key of a sample field for a base metric, honouring the rewards toggle.
+const key = (base) => (includeRewards ? base + "Net" : base);
+
+function metricName(base) {
+  const name = { borrow: "Borrow APY", supply: "Supply APY", deposit: "Deposit APY" }[base];
+  return includeRewards ? `Net ${name[0].toLowerCase()}${name.slice(1)}` : name;
+}
+
+function rewardsNote(p, base) {
+  const r = p[base + "Rwd"];
+  if (!r) return "";
+  return ` · rewards ${base === "borrow" ? "−" : "+"}${fmtPct(r)}${includeRewards ? "" : " (excluded)"}`;
+}
+
+function simDays() {
+  return Math.max(horizonDays, dayN || 0);
+}
+
+function upTo(points, day) {
+  return points.filter((p) => p.day <= day + 1e-9);
+}
+
+// Linear interpolation between samples (4 per day).
+function valueAt(points, day, key) {
+  const i = points.findIndex((p) => p.day >= day - 1e-9);
+  if (i < 0) return points[points.length - 1][key];
+  if (i === 0 || Math.abs(points[i].day - day) < 1e-9) return points[i][key];
+  const a = points[i - 1], b = points[i];
+  return a[key] + (b[key] - a[key]) * (day - a.day) / (b.day - a.day);
+}
+
+function onDayNInput(e) {
+  const raw = e.target.value.trim();
+  const v = parseFloat(raw);
+  const valid = raw === "" || (!isNaN(v) && v >= 0 && v <= 3650);
+  e.target.classList.toggle("invalid", !valid);
+  e.target.classList.toggle("edited", raw !== "" && valid);
+  if (!valid) return;
+  dayN = raw === "" ? null : v;
+  const url = new URL(location.href);
+  if (dayN == null) url.searchParams.delete("day"); else url.searchParams.set("day", raw);
+  history.replaceState(null, "", url);
+  scheduleRerun();
+}
+
+// ∫ ln(1 + APY) dt over [0, day], in (rate per year)·days. Trapezoid, with the end point interpolated.
+// For borrow APY, ln(1 + APY) is exactly the continuous borrow rate.
+function logGrowth(points, key, day) {
+  let acc = 0;
+  const ln = (x) => Math.log1p(Math.max(x, -0.999999)); // net APYs can go negative when rewards exceed cost
+  for (let i = 1; i < points.length && points[i - 1].day < day; i++) {
+    const a = points[i - 1];
+    const bDay = Math.min(points[i].day, day);
+    const bVal = bDay === points[i].day ? points[i][key] : valueAt(points, bDay, key);
+    acc += (ln(a[key]) + ln(bVal)) / 2 * (bDay - a.day);
+  }
+  return acc;
+}
+
+// Effective APY over [0, day]: the compounded annual rate a position held throughout actually earns or pays.
+// (Averaging APYs overstates it, by a lot when rates spike.)
+function effectiveApy(points, key, day) {
+  return day > 0 ? Math.expm1(logGrowth(points, key, day) / day) : points[0][key];
+}
+
+// Interest accrued over [0, day] as a fraction of principal.
+function periodInterest(points, key, day) {
+  return Math.expm1(logGrowth(points, key, day) / 365);
+}
+
+function rerun() {
+  clearTimeout(rerunTimer);
+  if (!model) return;
+  const compound = document.getElementById("in-compound")?.checked ?? true;
+  const base = simulate(model, { withScenario: false, compound });
+  const scen = simulate(model, { withScenario: true, compound });
+  renderCards(base, scen);
+  renderWarnings([...(model.vault?.loadWarnings || []), ...scen.warnings]);
+  renderMarketsTable();
+  renderChart(base, scen);
+}
+
+function renderCards(base, scen) {
+  const b0 = base.points[0];
+  const s0 = scen.points[0];
+  const scenH = upTo(scen.points, horizonDays);
+  const sEnd = scenH[scenH.length - 1];
+  const bEnd = upTo(base.points, horizonDays).at(-1);
+  const k = key(metric);
+  const label = metricName(metric);
+
+  const cards = [];
+  if (dayN != null) {
+    const bk = key("borrow");
+    const sN = valueAt(scen.points, dayN, bk);
+    const bN = valueAt(base.points, dayN, bk);
+    const pN = { borrowRwd: valueAt(scen.points, dayN, "borrowRwd") || 0 };
+    cards.push({
+      label: `${metricName("borrow")}${model.kind === "vault" ? " (weighted)" : ""} at day ${dayN}`,
+      value: fmtPct(sN), cls: deltaClass(s0[bk], sN), highlight: true,
+      sub: `${bN !== sN ? `no action: ${fmtPct(bN)} · ` : ""}effective 0→${dayN}d: ${fmtPct(effectiveApy(scen.points, bk, dayN))}` +
+        ` · interest ${fmtPct(periodInterest(scen.points, bk, dayN), 3)} of principal · util ${fmtPct(valueAt(scen.points, dayN, "util"))}` +
+        rewardsNote(pN, "borrow"),
+    });
+  }
+  {
+    // Instantaneous borrow rate: the annualized per-second rate the IRM charges at that moment (no compounding, no rewards).
+    const at = dayN ?? 0;
+    const r = valueAt(scen.points, at, "borrowRate");
+    const perSecondWad = BigInt(Math.round(r / SECONDS_PER_YEAR * 1e18));
+    cards.push({
+      label: `Instantaneous borrow rate ${dayN != null ? `at day ${dayN}` : "after action"}${model.kind === "vault" ? " (weighted)" : ""}`,
+      value: `${fmtPct(r, 3)} APR`, cls: dayN != null ? deltaClass(s0.borrowRate, r) : deltaClass(b0.borrowRate, r),
+      sub: `${perSecondWad.toLocaleString()} /s (WAD) · e^r − 1 = ${fmtPct(aprToApy(r))} APY`,
+      highlight: dayN != null,
+    });
+  }
+
+  let apiNow = null;
+  if (model.kind === "market") {
+    const m = model.markets[model.marketId];
+    apiNow = metric === "borrow"
+      ? (includeRewards ? m.apiNetBorrowApy : m.apiBorrowApy)
+      : (includeRewards ? m.apiNetSupplyApy : m.apiSupplyApy);
+  } else if (metric === "deposit") {
+    apiNow = includeRewards ? model.vault.apiNetApy : model.vault.apiNetApyExRewards;
+  }
+  const tokens = model.kind === "market"
+    ? model.markets[model.marketId][metric === "borrow" ? "borrowRwdTokens" : "supplyRwdTokens"]
+    : metric === "deposit" ? model.vault.rwdTokens : "";
+
+  cards.push({
+    label: `${label} now`,
+    value: fmtPct(b0[k]),
+    sub: (apiNow != null ? `API: ${fmtPct(apiNow)}` : "model") + rewardsNote(b0, metric) + (tokens && b0[metric + "Rwd"] ? ` (${tokens})` : ""),
+  });
+  cards.push({
+    label: `${label} after action`,
+    value: fmtPct(s0[k]), cls: deltaClass(b0[k], s0[k]),
+    sub: `Δ ${((s0[k] - b0[k]) * 1e4).toFixed(0)} bps` + rewardsNote(s0, metric),
+  });
+  cards.push({
+    label: `${label} at day ${horizonDays}`,
+    value: fmtPct(sEnd[k]), cls: deltaClass(s0[k], sEnd[k]),
+    sub: `no action: ${fmtPct(bEnd[k])}` + rewardsNote(sEnd, metric),
+  });
+  cards.push({
+    label: `Effective ${label.replace(/^Net /, "net ")} over ${horizonDays}d`,
+    value: fmtPct(effectiveApy(scen.points, k, horizonDays)),
+    sub: `no action: ${fmtPct(effectiveApy(base.points, k, horizonDays))} · ` +
+      `interest ${fmtPct(periodInterest(scen.points, k, horizonDays), 3)}`,
+  });
+  cards.push({
+    label: model.kind === "market" ? "Utilization" : "Utilization (exposure-weighted)",
+    value: fmtPct(s0.util), cls: deltaClass(b0.util, s0.util),
+    sub: `now ${fmtPct(b0.util)} → day ${horizonDays} ${fmtPct(sEnd.util)}`,
+  });
+  if (model.kind === "market") {
+    const m = model.markets[model.marketId];
+    cards.push({
+      label: "Rate at target (APY)",
+      value: m.adaptive ? fmtPct(aprToApy(s0.rateAtTarget)) : "n/a",
+      sub: m.adaptive ? `day ${horizonDays}: ${fmtPct(aprToApy(sEnd.rateAtTarget))}` : "non-adaptive IRM",
+    });
+    const sim = cloneState(model);
+    const saved = model; model = sim; applyScenario(sim); model = saved;
+    const sm = sim.markets[model.marketId];
+    cards.push({
+      label: `Supply / Borrow (${model.symbol})`,
+      value: `${fmtAmt(sm.supply)} / ${fmtAmt(sm.borrow)}`,
+      sub: `liquidity ${fmtAmt(marketLiquidity(sm), model.symbol)} ${fmtUsd(marketLiquidity(sm))}`,
+    });
+  } else {
+    const v = model.vault;
+    const sim = cloneState(model);
+    const saved = model; model = sim; applyScenario(sim);
+    const maxDep = vaultMaxDeposit(sim.vault), maxWd = vaultMaxWithdraw(sim.vault);
+    model = saved;
+    const sub = [`max withdraw ${fmtAmt(maxWd, model.symbol)}`];
+    if (v.version === 2) {
+      sub.push(`max rate ${fmtPct(v.maxRate, 1)} APR (${fmtPct(aprToApy(v.maxRate), 1)} APY)`);
+      if (scen.points.some((p) => p.maxRateBinding)) sub.push("max rate caps the deposit APY");
+    }
+    cards.push({
+      label: "Max deposit after action",
+      value: maxDep > 1e12 ? "no cap" : fmtAmt(maxDep, model.symbol),
+      sub: sub.join(" · "),
+    });
+  }
+
+  document.getElementById("summary-cards").innerHTML = cards.map((c) => `
+    <div class="card${c.highlight ? " highlight" : ""}">
+      <div class="card-label">${escapeHtml(c.label)}</div>
+      <div class="card-value ${c.cls || ""}">${escapeHtml(c.value)}</div>
+      <div class="card-sub">${escapeHtml(c.sub || "")}</div>
+    </div>`).join("");
+}
+
+function renderWarnings(warnings) {
+  document.getElementById("sim-warnings").innerHTML = warnings.map((w) => `<div class="warn">⚠ ${escapeHtml(w)}</div>`).join("");
+}
+
+function renderMarketsTable() {
+  const panel = document.getElementById("markets-panel");
+  if (model.kind !== "vault") { panel.style.display = "none"; return; }
+  panel.style.display = "block";
+
+  // Simulated post-action state for the "after" columns.
+  const sim = cloneState(model);
+  const saved = model; model = sim; applyScenario(sim); model = saved;
+
+  const exposure = {};
+  model = sim; collectExposure(sim.vault, 1, exposure); model = saved;
+  const exposureNow = {};
+  collectExposure(model.vault, 1, exposureNow);
+
+  const thead = document.querySelector("#markets-table thead");
+  const tbody = document.querySelector("#markets-table tbody");
+  const ids = Object.keys(model.markets).sort((a, b) => (exposureNow[b] || 0) - (exposureNow[a] || 0));
+
+  if (!thead.innerHTML) {
+    thead.innerHTML = `<tr>
+      <th>Market</th><th>Borrow Δ</th><th>LLTV</th><th>Vault exposure</th><th>Cap</th>
+      <th>Supply</th><th>Borrow</th><th>Utilization</th><th>Borrow APY</th><th>Supply APY</th>
+      <th title="Reward APR for suppliers / borrowers">Rewards S / B</th><th>Rate @ target</th></tr>`;
+  }
+
+  // Preserve typed values across re-renders.
+  const typed = {};
+  tbody.querySelectorAll("input").forEach((i) => typed[i.id] = i.value);
+  const focused = document.activeElement?.id;
+  const caret = document.activeElement?.selectionStart;
+  const sym = model.symbol;
+  const fmtCap = (x) => (x > 1e12 ? "∞" : fmtAmt(x));
+  const capOf = (id) => {
+    if (model.vault.version === 2) {
+      const c = (model.vault.caps || []).find((x) => x.type === "MarketV1" && x.marketId === id);
+      if (!c) return "—";
+      return fmtCap(c.absolute) + (c.relative < 1 ? ` · ${fmtPct(c.relative, 0)}` : "");
+    }
+    const p = model.vault.positions.find((x) => x.type === "market" && x.marketId === id);
+    if (!p || p.cap == null) return "—";
+    return fmtCap(p.cap);
+  };
+
+  tbody.innerHTML = ids.map((id) => {
+    const m0 = model.markets[id];
+    const m1 = sim.markets[id];
+    const a0 = marketApys(m0);
+    const a1 = marketApys(m1);
+    const arrow = (x0, x1, f) => Math.abs(x1 - x0) < 1e-9 ? f(x0) : `${f(x0)} <span class="arrow">→</span> <span class="${deltaClass(x0, x1)}">${f(x1)}</span>`;
+    const inputId = `in-mkt-borrow-${id}`;
+    return `<tr>
+      <td title="${escapeHtml(id)}">${escapeHtml(m0.label)}</td>
+      <td>${m0.borrowable ? `<input type="text" id="${escapeHtml(inputId)}" placeholder="0 ${escapeHtml(sym)}" value="${escapeHtml(typed[inputId] || "")}" class="${typed[inputId] ? "edited" : ""}">` : ""}</td>
+      <td>${m0.lltv ? fmtPct(m0.lltv, 1) : "—"}</td>
+      <td>${arrow(exposureNow[id] || 0, exposure[id] || 0, (x) => fmtAmt(x))}</td>
+      <td>${capOf(id)}</td>
+      <td>${arrow(m0.supply, m1.supply, (x) => fmtAmt(x))}</td>
+      <td>${arrow(m0.borrow, m1.borrow, (x) => fmtAmt(x))}</td>
+      <td>${arrow(a0.u, a1.u, fmtPct)}</td>
+      <td>${m0.borrowable ? arrow(a0.borrowApy, a1.borrowApy, fmtPct) : "—"}</td>
+      <td>${arrow(a0.supplyApy, a1.supplyApy, fmtPct)}</td>
+      <td title="${escapeHtml([m0.supplyRwdTokens, m0.borrowRwdTokens].filter(Boolean).join(" / "))}">${
+        m0.supplyRwd0 || m0.borrowRwd0
+          ? `${arrow(marketRewards(m0).supply, marketRewards(m1).supply, fmtPct)} / ${arrow(marketRewards(m0).borrow, marketRewards(m1).borrow, fmtPct)}`
+          : "—"}</td>
+      <td>${m0.adaptive ? fmtPct(aprToApy(m0.rateAtTarget)) : "—"}</td>
+    </tr>`;
+  }).join("");
+
+  tbody.querySelectorAll("input").forEach((i) => i.addEventListener("input", onInput));
+  if (focused && focused.startsWith("in-mkt-borrow-")) {
+    const el = document.getElementById(focused);
+    if (el) { el.focus(); const c = caret ?? el.value.length; el.setSelectionRange(c, c); }
+  }
+}
+
+function renderChart(base, scen) {
+  lastScenPoints = scen.points;
+  const series = (pts, f) => pts.map((p) => ({ x: p.day, y: f(p) }));
+  const k = key(metric);
+  const scenVals = series(scen.points, (p) => p[k] * 100);
+  const baseVals = series(base.points, (p) => p[k] * 100);
+  const utilVals = series(scen.points, (p) => p.util * 100);
+  const changed = scenVals.some((v, i) => Math.abs(v.y - baseVals[i].y) > 1e-9);
+  const metricLabel = metricName(metric);
+
+  const datasets = [
+    {
+      label: changed ? `${metricLabel} (scenario)` : metricLabel,
+      data: scenVals, yAxisID: "y",
+      borderColor: "#1f6feb", backgroundColor: "rgba(31,111,235,0.1)",
+      fill: true, tension: 0.2, pointRadius: 0, borderWidth: 2,
+    },
+    {
+      label: `${metricLabel} (no action)`,
+      data: changed ? baseVals : [], yAxisID: "y",
+      borderColor: "#8b949e", borderDash: [6, 4],
+      fill: false, tension: 0.2, pointRadius: 0, borderWidth: 1.5,
+    },
+    {
+      label: "Utilization",
+      data: utilVals, yAxisID: "y2",
+      borderColor: "rgba(240,136,62,0.7)", borderDash: [2, 3],
+      fill: false, tension: 0.2, pointRadius: 0, borderWidth: 1.5,
+    },
+    {
+      label: dayN != null ? `${metricLabel} at day ${dayN}` : "",
+      data: dayN != null ? [{ x: dayN, y: valueAt(scen.points, dayN, k) * 100 }] : [], yAxisID: "y",
+      borderColor: "#e6edf3", backgroundColor: "#1f6feb",
+      showLine: false, pointRadius: 6, pointHoverRadius: 8, pointBorderWidth: 2,
+    },
+  ];
+
+  if (chart) {
+    chart.options.scales.x.max = simDays();
+    chart.data.datasets = datasets;
+    chart.update("none");
+    return;
+  }
+
+  const ctx = document.getElementById("projection-chart").getContext("2d");
+  chart = new Chart(ctx, {
+    type: "line",
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: {
+          labels: { color: "#8b949e", boxWidth: 14, filter: (item, data) => data.datasets[item.datasetIndex].data.length > 0 },
+        },
+        tooltip: {
+          callbacks: {
+            title: (items) => `Day ${items[0].parsed.x.toFixed(2).replace(/\.?0+$/, "")}`,
+            label: (c) => `${c.dataset.label}: ${c.parsed.y.toFixed(3)}%`,
+            footer: (items) => {
+              const p = lastScenPoints && valueAt(lastScenPoints, items[0].parsed.x, "borrowRate");
+              return p != null ? `Instantaneous borrow rate: ${(p * 100).toFixed(3)}% APR` : "";
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: "linear",
+          grid: { color: "#21262d" },
+          min: 0, max: simDays(),
+          ticks: { color: "#8b949e", maxTicksLimit: 10, callback: (v) => `Day ${v}` },
+        },
+        y: {
+          grid: { color: "#21262d" },
+          ticks: { color: "#8b949e", callback: (v) => v.toFixed(2) + "%" },
+        },
+        y2: {
+          position: "right", min: 0, max: 100,
+          grid: { drawOnChartArea: false },
+          ticks: { color: "rgba(240,136,62,0.8)", callback: (v) => v + "%" },
+        },
+      },
+    },
+  });
+}
+
+// ── Init ────────────────────────────────────────────────────────────
+
+(async function init() {
+  const params = new URLSearchParams(location.search);
+  const chainId = Number(params.get("chain")) || DEFAULT_CHAIN_ID;
+  document.getElementById("target-input").value = params.get("id") || DEFAULT_TARGET;
+  document.getElementById("target-input").addEventListener("keydown", (e) => { if (e.key === "Enter") loadTarget(); });
+  document.getElementById("in-rewards").addEventListener("change", (e) => {
+    includeRewards = e.target.checked;
+    rerun();
+  });
+  const dayInput = document.getElementById("in-day-n");
+  dayInput.addEventListener("input", onDayNInput);
+  if (params.get("day")) {
+    dayInput.value = params.get("day");
+    onDayNInput({ target: dayInput });
+  }
+
+  const chains = await fetchChains();
+  if (!chains.some((c) => c.id === chainId)) chains.push({ id: chainId, network: `Chain ${chainId}` });
+  const select = document.getElementById("chain-select");
+  select.innerHTML = chains.map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.network)} (${c.id})</option>`).join("");
+  select.value = String(chainId);
+
+  loadTarget();
+})();
+  </script>
+</body>
+</html>
